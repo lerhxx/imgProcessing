@@ -8,7 +8,7 @@
 			padding: 0;
 			margin: 10px;
 		}
-		.container {
+		#container {
 			width: 500px;
 			margin: 10px 0;
 		}
@@ -22,7 +22,7 @@
 			vertical-align: middle;
 		}
 		.size-group input{
-			width: 60px;
+			width: 50px;
 			padding: 3px 5px;
 		}
 		.size-group label {
@@ -31,22 +31,18 @@
 		.size-group label:first-child{
 			margin-left: 0px;
 		}
-		canvas {
-			/*max-width: 500px;
-			max-height: 500px;*/
-		}
 	</style>
 </head>
 <body>
-	<div class='container'>
-		<div class='group size-group'>
+	<div id='container'>
+		<!-- <div class='group size-group'>
 			<label>宽度：</label><input type="text" placeholder="图片宽度">px
 			<label>高度：</label><input type="text" placeholder="图片高度">px
 			<label>大小：</label><input type="text" placeholder="图片大小">KB
 		</div>
 		<div class='group'>
 			<label><input type="checkbox" id='ratio'>约束比例</label>
-		</div>
+		</div> -->
 		<input type='file' id='file'/>
 	</div>
 	<canvas id='canvas'></canvas>
