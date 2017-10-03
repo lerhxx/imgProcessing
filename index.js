@@ -1,39 +1,21 @@
 window.onload = () =>{
 	let input = document.getElementById('file');
-	let file = null;
 	let screenShot = new ScreenShot();
-
 
 	input.addEventListener('change', () => {
 		if(input.files.length === 0) {
 			return;
 		}
 
-		file = input.files[0];
-		// if(!/^image\//.test(file.type)) {
-		// 	console.log('please choose image');
-		// 	return;
-		// }
-
-		// let reader = new FileReader();
-		// reader.onload = () => {
-		// 	let img = new Image();
-		// 	img.onload = () => {
-		// 	}
-		// 	img.src = reader.result;
-		// }
-		// reader.readAsDataURL(file);
-
-		screenShot.file2Image(file);
+		screenShot.file2Image(input.files[0]);
 
 	})
 }
 class ScreenShot {
 	constructor(opt={}) {
 		this.opt = opt;
-		this.opt.initSize = this.opt.initSize || 400;
+		this.opt.limitSize = this.opt.limitSize || 400;
 
-		this.scale = 1;
 		this.initCtx(this.opt);
 		this.tool = new Tool(this, {
 			containerId: 'container',
@@ -41,33 +23,34 @@ class ScreenShot {
 				widthIn: 'onWidthChange',
 				heightIn: 'onHeightChange',
 				volumeIn: 'onVolumeChange',
-				ratio: 'onRatioChange'
+				ratio: 'onRatioChange',
+				download: 'onDownLoad'
 			},
 			widthInLimit: {
 				min: 0,
-				max: this.opt.initSize
+				max: this.opt.limitSize
 			},
 			heightInLimit: {
 				min: 0,
-				max: this.opt.initSize
+				max: this.opt.limitSize
 			},
 			ratioInLimit: {
 				min: 0
 			}
 		});
+
 		this.isConstraint = this.tool.ratio.checked;
+		this.volume = 0;         // 图像大小
 
 		this.imgInfo = {
 			img: null,
 			sx: 0,
 			sy: 0,
-			ex: 0,
-			ey: 0,
-			w: 0,
-			h: 0,
-			aspect: 1
+			sw: 0,        // 图片绘制宽度
+			sh: 0,        // 图片绘制高度
+			w: 0,         // 原图宽
+			h: 0,         // 原图高
 		};
-		this.count = 0;
 	}
 
 	/*
@@ -82,12 +65,11 @@ class ScreenShot {
 		}
 
 		this.ctx = this.canvas.getContext('2d');
-		this.canvas.width = opt.initSize || this.opt.initSize;
-		this.canvas.height = opt.initSize || this.opt.initSize;
-		// 保存绘制区域尺寸
-		this.WIDTH = this.canvas.width;
-		this.HEIGHT = this.canvas.height;
+		// 保存 canvas 尺寸
+		this.WIDTH = 0;
+		this.HEIGHT = 0;
 
+		this.resizeCanvas()
 		this.canvasEvent();
 	}
 
@@ -100,21 +82,46 @@ class ScreenShot {
 		}
 
 		this.isConstraint ? this.equalRatioResize(w, h) : this.unEqualRatioResize(w, h);
+		this.resizeCanvas()
+	}
 
-		this.scale = 1;
+	resizeCanvas() {
+		this.canvas.width = this.WIDTH;
+		this.canvas.height = this.HEIGHT;
 		this.setSize();
 	}
 
+	// 等比缩放
 	equalRatioResize(w, h) {
-		let isShink = w > this.opt.initSize || h > this.opt.initSize;
+		let isShink = w > this.opt.limitSize || h > this.opt.limitSize;
 		this.shrinkImg(w, h, isShink);
 	}
 
-	unEqualRatioResize(w, h) {
-		this.WIDTH = w > this.opt.initSize ? this.opt.initSize : w;
-		this.HEIGHT = h > this.opt.initSize ? this.opt.initSize : h;
+	/*
+	 * 加载图片后缩小图片
+	 */
+	shrinkImg(w, h, isShink) {
+		if(w > h) {
+			this.WIDTH = isShink ? this.opt.limitSize : w;
+			this.HEIGHT = (h * this.WIDTH / w).toFixed(2);
+		}else {
+			this.HEIGHT = isShink ? this.opt.limitSize : h;
+			this.WDITH = (w * this.HEIGHT / h).toFixed(2);
+		}
 	}
 
+	/*
+	 * 不等比缩放
+	 */
+	unEqualRatioResize(w, h) {
+		let limitSize = this.opt.limitSize;
+		this.WIDTH = w > limitSize ? limitSize : w;
+		this.HEIGHT = h > limitSize ? limitSize : h;
+	}
+
+	/*
+	 * 等比缩放，以宽度为准
+	 */
 	resizeWidth(w) {
 		w = parseFloat(w);
 		if(this.isConstraint) {
@@ -123,9 +130,12 @@ class ScreenShot {
 		}else {
 			this.WIDTH = w.toFixed(2);
 		}
-		this.setSize();
+		this.resizeCanvas(this.WIDTH, this.HEIGHT)
 	}
 
+	/*
+	 * 等比缩放，以高度为准
+	 */
 	resizeHeight(h) {
 		h = parseFloat(h);
 		if(this.isConstraint) {
@@ -134,20 +144,7 @@ class ScreenShot {
 		}else {
 			this.HEIGHT = h.toFixed(2);
 		}
-		this.setSize();
-	}
-
-	/*
-	 * 缩小图片
-	 */
-	shrinkImg(w, h, isShink) {
-		if(w > h) {
-			this.WIDTH = isShink ? this.opt.initSize : w;
-			this.HEIGHT = (h * this.WIDTH / w).toFixed(2);
-		}else {
-			this.HEIGHT = isShink ? this.opt.initSize : h;
-			this.WDITH = (w * this.HEIGHT / h).toFixed(2);
-		}
+		this.resizeCanvas(this.WIDTH, this.HEIGHT)
 	}
 
 	setSize() {
@@ -179,16 +176,21 @@ class ScreenShot {
 		})
 	}
 
+	/*
+	 * 缩放图片
+	 */
 	scaleImg() {
 		let imgInfo = this.imgInfo;
-		imgInfo.sx = 0;
-		imgInfo.sy = 0;
-		imgInfo.ex = imgInfo.w / this.scale,
-		imgInfo.ey = imgInfo.h / this.scale;
-		imgInfo.cw = imgInfo.w / this.scale,
-		imgInfo.ch = imgInfo.h / this.scale;
-		console.log(this.imgInfo.sx)
-		console.log(this.imgInfo.ex)
+		imgInfo.sw = imgInfo.w / this.scale,
+		imgInfo.sh = imgInfo.h / this.scale;
+
+		// 检查缩放之后图片是否超出范围
+		if(imgInfo.w - imgInfo.sw < imgInfo.sx) {
+			imgInfo.sx = imgInfo.w - imgInfo.sw;
+		}
+		if(imgInfo.h - imgInfo.sh < imgInfo.sy) {
+			imgInfo.sy = imgInfo.h - imgInfo.sh;
+		}
 		this.drawImage();
 	}
 
@@ -211,29 +213,14 @@ class ScreenShot {
 				return;
 			}
 
-			let dX = e.clientX - this.start.x,
-				dY = e.clientY - this.start.y,
-				imgInfo = this.imgInfo,
-				sx = imgInfo.sx - dX,
-				sy = imgInfo.sy - dY,
-				ex = imgInfo.ex - dX,
-				ey = imgInfo.ey - dY;
-if(this.count === 10) {
-	console.log('WIDTH ' + this.WIDTH)
-	console.log('sx ' + sx)
-	console.log('imex ' + imgInfo.ex)
-	console.log('imgWIDTH ' + imgInfo.w)
-	console.log('cw ' + imgInfo.cw)
-	console.log(sx <= imgInfo.w - this.WIDTH)
-	this.count = 0;
-}else {
-	++this.count;
-}
+			let imgInfo = this.imgInfo,
+				sx = imgInfo.sx - e.clientX + this.start.x,
+				sy = imgInfo.sy - e.clientY + this.start.y;
 
-			if(sx >= 0 && sx <= imgInfo.w - this.WIDTH) {
+			if(sx >= 0 && sx <= imgInfo.w - imgInfo.sw) {
 				imgInfo.sx = sx;
 			}
-			if(sy >= 0 && sy <= imgInfo.h - this.HEIGHT) {
+			if(sy >= 0 && sy <= imgInfo.h - imgInfo.sh) {
 				imgInfo.sy = sy;
 			}
 
@@ -263,6 +250,8 @@ if(this.count === 10) {
 				img.onload = () => {
 					this.updateImg(img);
 					this.scale = 1;
+					// this.volume = file.size / 1024;
+					// this.dispatch('changeVolume', this.volume);
 					resolve(img);
 				}
 				img.onerror = (err) => {
@@ -285,12 +274,10 @@ if(this.count === 10) {
 			img: img,
 			sx: 0,
 			sy: 0,
-			ex: w,
-			ey: h,
+			sw: w,
+			sh: h,
 			w: w,
 			h: h,
-			cw: this.WIDTH,
-			ch: this.HEIGHT,
 			aspect: w / h
 		})
 
@@ -310,7 +297,7 @@ if(this.count === 10) {
 		}
 
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-		this.ctx.drawImage(img, imgInfo.sx, imgInfo.sy, imgInfo.ex, imgInfo.ey, 0, 0, this.WIDTH, this.HEIGHT);
+		this.ctx.drawImage(img, imgInfo.sx, imgInfo.sy, imgInfo.sw, imgInfo.sh, 0, 0, this.WIDTH, this.HEIGHT);
 	}
 
 	/*
@@ -324,30 +311,80 @@ if(this.count === 10) {
 		return true;
 	}
 
+	/*
+	 * 响应 tool 触发的事件
+	 */
 	on(event, value) {
 		this[event] && this[event](value)
 	}
 
+	/*
+	 * 调整 canvas 宽度
+	 */
 	onWidthChange(val) {
 		this.resizeWidth(val);
 		this.drawImage();
 	}
 
+	/*
+	 * 调整 canvas 高度
+	 */
 	onHeightChange(val) {
 		this.resizeHeight(val);
 		this.drawImage();
 	}
 
+	/*
+	 * 图片体积
+	 */
 	onVolumeChange(val) {
-		console.log(val)
+		this.volume = val;
 	}
 
+	/*
+	 * 图像是否成比例
+	 */
 	onRatioChange(val) {
 		this.isConstraint = val;
 		this.resizeWidth(this.WIDTH);
 		this.drawImage();
 	}
 
+	/*
+	 * 下载图片
+	 */
+	onDownLoad(opt) {
+		if(!this.imgInfo.img) {
+			alert('请选择图片');
+			return;
+		}
+
+		this.canvas2Blob(opt[0], opt[1]);
+	}
+
+	/*
+	 * 图像转换为 Blob
+	 */
+	canvas2Blob(type, encoderOption) {
+		let file = null;
+		this.canvas.toBlob((blob) => {
+			file = blob;
+			console.log(blob)
+		}, `image/${type}`, 0.5)
+	}
+
+	/*
+	 * 获取 canvas.toDataURL 大小
+	 */
+	getImgSize(type='jpeg') {
+		this.canvas.toBlob((blob) => {
+			this.dispatch('changeVolume', blob.size);
+		}, `image/${type}`, 1)
+	}
+
+	/*
+	 * 触发 tool 事件
+	 */
 	dispatch(event, val) {
 		this.tool && this.tool.on instanceof Function && this.tool.on(event, val);
 	}
@@ -396,19 +433,43 @@ class Tool {
 			children = `<div class='group size-group'>
 							<label>宽度：</label><input type="text" id='width' placeholder="0">px
 							<label>高度：</label><input type="text" id='height' placeholder="0">px
-							<label>大小：</label><input type="text" id='volume' placeholder="0">KB
 						</div>
 						<div class='group'>
 							<label><input type="checkbox" checked id='ratio'>约束比例</label>
+						</div>
+						<div class='group'>
+							<button id='savePNG'>保存为PNG</button>
+							<button id='saveJPEG'>保存为JPEG</button>
+						</div>
+						<div class='dialog' id='dialog' style='visibility: hidden'>
+							<div class='dialog-content'>
+								<div class='dialog-body'>
+									<p>当前为：<span id='newVolume'></span>kb</p>
+									<label>压缩至：</label><input type="text" id='volume' placeholder="0">kb
+								</div>
+								<div class='dialog-footer'>
+									<button id='dialog-sure'>确定</button>
+									<button id='dialog-cancle'>取消</button>
+								</div>
+							</div>
 						</div>`;
+
 		div.innerHTML = children;
 		fragment.appendChild(div);
 		this.container.appendChild(fragment);
 
 		this.widthIn = document.getElementById('width');
 		this.heightIn = document.getElementById('height');
-		this.volumeIn = document.getElementById('volume');
 		this.ratio = document.getElementById('ratio');
+
+		this.dialog = document.getElementById('dialog');
+		this.volumeIn = document.getElementById('volume');
+		this.newVolume = document.getElementById('newVolume');
+		this.sureBtn = document.getElementById('dialog-sure');
+		this.cancleBtn = document.getElementById('dialog-cancle');
+
+		this.PNG = document.getElementById('savePNG');
+		this.JPEG = document.getElementById('saveJPEG');
 
 		this.addEvent();
 	}
@@ -419,6 +480,8 @@ class Tool {
 	addEvent() {
 		this.limitInputNumberEvent(['widthIn', 'heightIn', 'volumeIn']);
 		this.changeRatioEvent();
+		this.typeBtnEvent(['PNG', 'JPEG']);
+		this.compressBtnEvent();
 	}
 
 	/*
@@ -439,6 +502,9 @@ class Tool {
 		})
 	}
 
+	/*
+	 * val 是否在 limit 范围内
+	 */
 	inRangeVal(limit, val) {
 		let value = parseFloat(val) || 0;
 		return value > limit.max ? limit.max : value < limit.min ? limit.min : value;
@@ -455,16 +521,70 @@ class Tool {
 	}
 
 	/*
+	 * 下载
+	 */
+	typeBtnEvent(arr) {
+		if(!arr instanceof Array) {
+			return;
+		}
+
+		let self = this;
+		arr.forEach(type => {
+			self[type] && self[type].addEventListener('click', function() {
+				type = type.toLowerCase();
+				if(type === 'jpeg' || type === 'webp') {
+					self.compress();
+				}else {
+					self.download(type);
+				}
+			})
+		})
+	}
+
+	download(type, encoderOption) {
+		this.opt.event.download && this.emit(this.opt.event.download, [type, encoderOption]);
+	}
+
+	compress() {
+		this.emit('getImgSize');
+		this.changeDialogStatus(true);
+	}
+
+	compressBtnEvent() {
+		this.sureBtn && this.sureBtn.addEventListener('click', () => {
+			let encoderOption = this.volumeIn.value / this.newVolume.innerHTML;
+			console.log(this.volumeIn.value)
+			console.log(this.newVolume.innerHTML)
+			console.log(encoderOption)
+			this.download('jpeg', encoderOption)
+		})
+
+		this.cancleBtn && this.cancleBtn.addEventListener('click', () => {
+			this.changeDialogStatus(false);
+		})
+	}
+
+	changeDialogStatus(display) {
+		this.dialog.style.visibility = display ? 'visible' : 'hidden';
+	}
+ 
+	/*
 	 * 触发父元素事件
 	 */
 	emit(event, value) {
 		this.parent && this.parent.on instanceof Function && this.parent.on(event, value);
 	}
 
+	/*
+	 * 响应父元素事件
+	 */
 	on(event, val) {
 		this[event] && this[event](val);
 	}
 
+	/*
+	 * 调整宽高
+	 */
 	setSize(val={}) {
 		if(val.w) {
 			this.widthIn.value = (this.widthInLimit, val.w);
@@ -473,5 +593,16 @@ class Tool {
 		if(val.h) {
 			this.heightIn.value = (this.heightInLimit, val.h);
 		}
+	}
+
+	changeVolume(val) {
+		console.log(val)
+		val = (val / 1024).toFixed(2) * 1;
+		this.opt.volumeInLimit = {
+			min: 0,
+			max: val
+		};
+		this.newVolume.innerHTML = val;
+		this.volumeIn.value = val;
 	}
 }
