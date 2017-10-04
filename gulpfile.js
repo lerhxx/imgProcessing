@@ -4,7 +4,7 @@ let uglify = require('gulp-uglify');
 let pump = require('pump');
 
 let src = './src/*.js';
-let dist = './imageresizer/dist/';
+let dist = './dist/';
 
 gulp.task('babel', () => {
 	return gulp.src(src)
