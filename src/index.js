@@ -115,7 +115,7 @@ class ScreenShot {
 			this.HEIGHT = (h * this.WIDTH / w).toFixed(2);
 		}else {
 			this.HEIGHT = isShink ? this.opt.limitSize : h;
-			this.WDITH = (w * this.HEIGHT / h).toFixed(2);
+			this.WIDTH = (w * this.HEIGHT / h).toFixed(2);
 		}
 	}
 
