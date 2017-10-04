@@ -7,7 +7,13 @@ window.onload = () =>{
 			return;
 		}
 
-		screenShot.file2Image(input.files[0]);
+		screenShot.file2Image(input.files[0]).then(img => {
+			screenShot.updateImg(img);
+		}).catch(err => {
+			alert(err);
+			screenShot.clearImg();
+			input.value = '';
+		})
 
 	})
 }
@@ -71,6 +77,7 @@ class ScreenShot {
 
 		this.resizeCanvas()
 		this.canvasEvent();
+		this.polyfillBlob();
 	}
 
 	/*
@@ -244,14 +251,13 @@ class ScreenShot {
 	 */
 	file2Image(file) {
 		return new Promise((resolve, reject) => {
+			if(!/^image\//.test(file.type)) {
+				reject('请选择图片')
+			}
 			let reader = new FileReader();
 			reader.onload = () => {
 				let img = new Image();
 				img.onload = () => {
-					this.updateImg(img);
-					this.scale = 1;
-					// this.volume = file.size / 1024;
-					// this.dispatch('changeVolume', this.volume);
 					resolve(img);
 				}
 				img.onerror = (err) => {
@@ -280,6 +286,7 @@ class ScreenShot {
 			h: h,
 			aspect: w / h
 		})
+		this.scale = 1;
 
 		this.resize(w, h);
 		this.drawImage();
@@ -359,27 +366,60 @@ class ScreenShot {
 			return;
 		}
 
-		this.canvas2Blob(opt[0], opt[1]);
+		this.canvas2Blob(opt[0], opt[1]).then(blob => {
+			let a = document.createElement('a');
+			let url = URL.createObjectURL(blob);
+
+			let event = document.createEvent('MouseEvents');
+			event.initMouseEvent('click', false, false);
+
+			a.download = `download.${opt[0]}`;
+			a.href = url;
+
+			a.dispatchEvent(event);
+			URL.revokeObjectURL(url);
+		}).catch(err => {
+			alert(err)
+		})
 	}
 
 	/*
 	 * 图像转换为 Blob
 	 */
 	canvas2Blob(type, encoderOption) {
-		let file = null;
-		this.canvas.toBlob((blob) => {
-			file = blob;
-			console.log(blob)
-		}, `image/${type}`, 0.5)
+		return new Promise((resolve, reject) => {
+			this.canvas.toBlob((blob) => {
+				this.dispatch('changeDialogStatus', false);
+				resolve(blob);
+			}, `image/${type}`, encoderOption)
+		})
 	}
 
 	/*
-	 * 获取 canvas.toDataURL 大小
+	 * polyfill Blob
+	 * https://developer.mozilla.org/zh-CN/docs/Web/API/HTMLCanvasElement/toBlob
 	 */
-	getImgSize(type='jpeg') {
-		this.canvas.toBlob((blob) => {
-			this.dispatch('changeVolume', blob.size);
-		}, `image/${type}`, 1)
+	polyfillBlob() {
+		if(!HTMLCanvasElement.prototype.toBlob) {
+			Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+				value: (cb, type, quality) => {
+					let binStr = atob(this.toDataURL(type, quality).split(',')[1]),
+						len = binStr.length,
+						arr = new Unit8Array(len);
+
+					for(let i = 0; i < len; ++i) {
+						arr[i] = binStr.charCodeAt(i);
+					}
+
+					cb(new Blob(arr, {type: type || 'image/png'}));
+				}
+			})
+		}
+	}
+
+	clearImg() {
+		this.imgInfo.img = null;
+		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	}
 
 	/*
@@ -443,9 +483,11 @@ class Tool {
 						</div>
 						<div class='dialog' id='dialog' style='visibility: hidden'>
 							<div class='dialog-content'>
+								<div class='dialog-head'>
+									<h5>请选择</h5>
+								</div>
 								<div class='dialog-body'>
-									<p>当前为：<span id='newVolume'></span>kb</p>
-									<label>压缩至：</label><input type="text" id='volume' placeholder="0">kb
+									<label>压缩质量：</label><input type="text" id='volume' value='0.92'>kb
 								</div>
 								<div class='dialog-footer'>
 									<button id='dialog-sure'>确定</button>
@@ -464,7 +506,7 @@ class Tool {
 
 		this.dialog = document.getElementById('dialog');
 		this.volumeIn = document.getElementById('volume');
-		this.newVolume = document.getElementById('newVolume');
+		// this.newVolume = document.getElementById('newVolume');
 		this.sureBtn = document.getElementById('dialog-sure');
 		this.cancleBtn = document.getElementById('dialog-cancle');
 
@@ -481,7 +523,7 @@ class Tool {
 		this.limitInputNumberEvent(['widthIn', 'heightIn', 'volumeIn']);
 		this.changeRatioEvent();
 		this.typeBtnEvent(['PNG', 'JPEG']);
-		this.compressBtnEvent();
+		this.dialogEvent();
 	}
 
 	/*
@@ -546,17 +588,19 @@ class Tool {
 	}
 
 	compress() {
-		this.emit('getImgSize');
 		this.changeDialogStatus(true);
 	}
 
-	compressBtnEvent() {
+	dialogEvent() {
+		let self = this;
+		this.dialog && this.dialog.addEventListener('click', function(e) {
+			if(e.target === this) {
+				self.changeDialogStatus(false);
+			}
+		})
+
 		this.sureBtn && this.sureBtn.addEventListener('click', () => {
-			let encoderOption = this.volumeIn.value / this.newVolume.innerHTML;
-			console.log(this.volumeIn.value)
-			console.log(this.newVolume.innerHTML)
-			console.log(encoderOption)
-			this.download('jpeg', encoderOption)
+			this.download('jpeg', this.volumeIn.value)
 		})
 
 		this.cancleBtn && this.cancleBtn.addEventListener('click', () => {
@@ -595,14 +639,14 @@ class Tool {
 		}
 	}
 
-	changeVolume(val) {
-		console.log(val)
-		val = (val / 1024).toFixed(2) * 1;
-		this.opt.volumeInLimit = {
-			min: 0,
-			max: val
-		};
-		this.newVolume.innerHTML = val;
-		this.volumeIn.value = val;
-	}
+	// changeVolume(val) {
+	// 	console.log(val)
+	// 	val = (val / 1024).toFixed(2) * 1;
+	// 	this.opt.volumeInLimit = {
+	// 		min: 0,
+	// 		max: val
+	// 	};
+	// 	this.newVolume.innerHTML = val;
+	// 	this.volumeIn.value = val;
+	// }
 }
