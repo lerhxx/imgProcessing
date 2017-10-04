@@ -9,10 +9,12 @@ window.onload = () =>{
 
 		screenShot.file2Image(input.files[0]).then(img => {
 			screenShot.updateImg(img);
+			screenShot.dispatch('toogleDownloadBtnStatus', false);
 		}).catch(err => {
 			alert(err);
 			screenShot.clearImg();
 			input.value = '';
+			screenShot.dispatch('toogleDownloadBtnStatus', true);
 		})
 
 	})
@@ -20,7 +22,7 @@ window.onload = () =>{
 class ScreenShot {
 	constructor(opt={}) {
 		this.opt = opt;
-		this.opt.limitSize = this.opt.limitSize || 400;
+		this.opt.limitSize = this.opt.limitSize || 500;
 
 		this.initCtx(this.opt);
 		this.tool = new Tool(this, {
@@ -453,8 +455,8 @@ class Tool {
 				max: Infinity
 			},
 			volumeInLimit: {
-				min: -Infinity,
-				max: Infinity
+				min: 0,
+				max: 1
 			}
 		}
 		Object.assign(this.opt, opt);
@@ -478,8 +480,8 @@ class Tool {
 							<label><input type="checkbox" checked id='ratio'>约束比例</label>
 						</div>
 						<div class='group'>
-							<button id='savePNG'>保存为PNG</button>
-							<button id='saveJPEG'>保存为JPEG</button>
+							<button id='savePNG' disabled>保存为PNG</button>
+							<button id='saveJPEG' disabled>保存为JPEG</button>
 						</div>
 						<div class='dialog' id='dialog' style='visibility: hidden'>
 							<div class='dialog-content'>
@@ -563,7 +565,7 @@ class Tool {
 	}
 
 	/*
-	 * 下载
+	 * 绑定下载按钮时间
 	 */
 	typeBtnEvent(arr) {
 		if(!arr instanceof Array) {
@@ -583,14 +585,23 @@ class Tool {
 		})
 	}
 
+	/*
+	 * 下载
+	 */
 	download(type, encoderOption) {
 		this.opt.event.download && this.emit(this.opt.event.download, [type, encoderOption]);
 	}
 
+	/*
+	 * 压缩
+	 */
 	compress() {
 		this.changeDialogStatus(true);
 	}
 
+	/*
+	 * 绑定 dialog 事件
+	 */
 	dialogEvent() {
 		let self = this;
 		this.dialog && this.dialog.addEventListener('click', function(e) {
@@ -608,8 +619,17 @@ class Tool {
 		})
 	}
 
+	/*
+	 * 改变 dialog visibility
+	 */
 	changeDialogStatus(display) {
 		this.dialog.style.visibility = display ? 'visible' : 'hidden';
+	}
+
+	toogleDownloadBtnStatus(flag=false, arr=['PNG', 'JPEG']) {
+		arr.forEach(btn => {
+			this[btn].disabled = flag;
+		})
 	}
  
 	/*
@@ -638,15 +658,4 @@ class Tool {
 			this.heightIn.value = (this.heightInLimit, val.h);
 		}
 	}
-
-	// changeVolume(val) {
-	// 	console.log(val)
-	// 	val = (val / 1024).toFixed(2) * 1;
-	// 	this.opt.volumeInLimit = {
-	// 		min: 0,
-	// 		max: val
-	// 	};
-	// 	this.newVolume.innerHTML = val;
-	// 	this.volumeIn.value = val;
-	// }
 }
